@@ -31,44 +31,44 @@ public class AdminManagementService {
     }
 
     public AdminDashboardDto overview() {
-        long total = count("SELECT COUNT_BIG(*) FROM users WHERE account_role = 'USER'");
+        long total = count("SELECT COUNT(*) FROM users WHERE account_role = 'USER'");
         long online = count("""
-                SELECT COUNT_BIG(*) FROM users WHERE account_role = 'USER' AND account_status = 'ACTIVE'
-                  AND activity_status = 1
-                  AND last_seen_at >= DATEADD(SECOND, -90, SYSUTCDATETIME())
-                """);
+                SELECT COUNT(*) FROM users WHERE account_role = 'USER' AND account_status = 'ACTIVE'
+                  AND activity_status = ?
+                  AND last_seen_at >= ?
+                """, Boolean.TRUE, utc(-90));
         long suspended = count(
-                "SELECT COUNT_BIG(*) FROM users WHERE account_role = 'USER' AND account_status = 'SUSPENDED'");
-        long pendingReports = count("SELECT COUNT_BIG(*) FROM user_reports WHERE status = 'PENDING'");
-        long inReviewReports = count("SELECT COUNT_BIG(*) FROM user_reports WHERE status = 'IN_REVIEW'");
-        long resolvedReports = count("SELECT COUNT_BIG(*) FROM user_reports WHERE status = 'RESOLVED'");
-        long dismissedReports = count("SELECT COUNT_BIG(*) FROM user_reports WHERE status = 'DISMISSED'");
+                "SELECT COUNT(*) FROM users WHERE account_role = 'USER' AND account_status = 'SUSPENDED'");
+        long pendingReports = count("SELECT COUNT(*) FROM user_reports WHERE status = 'PENDING'");
+        long inReviewReports = count("SELECT COUNT(*) FROM user_reports WHERE status = 'IN_REVIEW'");
+        long resolvedReports = count("SELECT COUNT(*) FROM user_reports WHERE status = 'RESOLVED'");
+        long dismissedReports = count("SELECT COUNT(*) FROM user_reports WHERE status = 'DISMISSED'");
         return new AdminDashboardDto(total, online, Math.max(0, total - online - suspended), suspended,
-                count("SELECT COUNT_BIG(DISTINCT reported_user_id) FROM user_reports"),
-                count("SELECT COUNT_BIG(*) FROM user_blocks"),
+                count("SELECT COUNT(DISTINCT reported_user_id) FROM user_reports"),
+                count("SELECT COUNT(*) FROM user_blocks"),
                 pendingReports, inReviewReports, resolvedReports, dismissedReports,
                 pendingReports + inReviewReports + resolvedReports + dismissedReports,
                 count("""
-                        SELECT COUNT_BIG(*) FROM users
+                        SELECT COUNT(*) FROM users
                         WHERE account_role = 'USER'
-                          AND created_at >= DATEADD(DAY, -7, SYSUTCDATETIME())
-                        """));
+                          AND created_at >= ?
+                        """, utc(-7 * 24 * 3600)));
     }
 
     public AdminPageDto<AdminUserDto> users(int requestedPage, int requestedSize, String query) {
         int page = Math.max(0, requestedPage);
         int size = pageSize(requestedSize);
         int offset = page * size;
-        String term = query == null || query.isBlank() ? null : "%" + query.trim() + "%";
+        String term = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase() + "%";
         String filter = term == null ? "WHERE u.account_role = 'USER'"
-                : "WHERE u.account_role = 'USER' AND (u.username LIKE ? OR u.display_name LIKE ? OR u.email LIKE ?)";
+                : "WHERE u.account_role = 'USER' AND (LOWER(u.username) LIKE ? OR LOWER(u.display_name) LIKE ? OR LOWER(u.email) LIKE ?)";
         Object[] args = term == null ? new Object[0] : new Object[]{term, term, term};
         long total = jdbcTemplate.queryForObject(
-                "SELECT COUNT_BIG(*) FROM users u " + filter, Long.class, args);
+                "SELECT COUNT(*) FROM users u " + filter, Long.class, args);
         String sql = """
                 SELECT u.id, u.display_name, u.username, u.email, u.account_status,
                     u.last_seen_at, u.created_at,
-                    (SELECT COUNT_BIG(*) FROM posts p WHERE p.author_id = u.id) AS posts_count
+                    (SELECT COUNT(*) FROM posts p WHERE p.author_id = u.id) AS posts_count
                 FROM users u
                 """ + filter + """
                 ORDER BY u.created_at DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
@@ -86,13 +86,13 @@ public class AdminManagementService {
         List<AdminUserDetailDto> result = jdbcTemplate.query("""
                 SELECT u.id, u.display_name, u.username, u.email, u.account_status, u.last_seen_at,
                     u.created_at, u.bio, u.avatar_url, u.cover_url, u.private_account, u.activity_status,
-                    (SELECT COUNT_BIG(*) FROM posts p WHERE p.author_id = u.id) AS posts_count,
-                    (SELECT COUNT_BIG(*) FROM user_follows f WHERE f.followed_id = u.id) AS followers_count,
-                    (SELECT COUNT_BIG(*) FROM user_follows f WHERE f.follower_id = u.id) AS following_count,
-                    (SELECT COUNT_BIG(*) FROM user_reports r WHERE r.reporter_id = u.id) AS reports_made_count,
-                    (SELECT COUNT_BIG(*) FROM user_reports r WHERE r.reported_user_id = u.id) AS reports_received_count,
-                    (SELECT COUNT_BIG(*) FROM user_blocks b WHERE b.blocked_id = u.id) AS blocked_by_count,
-                    (SELECT COUNT_BIG(*) FROM user_blocks b WHERE b.blocker_id = u.id) AS blocking_count
+                    (SELECT COUNT(*) FROM posts p WHERE p.author_id = u.id) AS posts_count,
+                    (SELECT COUNT(*) FROM user_follows f WHERE f.followed_id = u.id) AS followers_count,
+                    (SELECT COUNT(*) FROM user_follows f WHERE f.follower_id = u.id) AS following_count,
+                    (SELECT COUNT(*) FROM user_reports r WHERE r.reporter_id = u.id) AS reports_made_count,
+                    (SELECT COUNT(*) FROM user_reports r WHERE r.reported_user_id = u.id) AS reports_received_count,
+                    (SELECT COUNT(*) FROM user_blocks b WHERE b.blocked_id = u.id) AS blocked_by_count,
+                    (SELECT COUNT(*) FROM user_blocks b WHERE b.blocker_id = u.id) AS blocking_count
                 FROM users u
                 WHERE u.id = ? AND u.account_role = 'USER'
                 """, (row, index) -> {
@@ -118,11 +118,11 @@ public class AdminManagementService {
         int size = pageSize(requestedSize);
         int offset = page * size;
         long total = jdbcTemplate.queryForObject(
-                "SELECT COUNT_BIG(*) FROM posts WHERE author_id = ?", Long.class, userId);
+                "SELECT COUNT(*) FROM posts WHERE author_id = ?", Long.class, userId);
         List<AdminPostDto> result = jdbcTemplate.query("""
                 SELECT p.id, p.caption, p.image_url, p.created_at,
-                    (SELECT COUNT_BIG(*) FROM post_likes l WHERE l.post_id = p.id) AS likes_count,
-                    (SELECT COUNT_BIG(*) FROM post_comments c WHERE c.post_id = p.id) AS comments_count
+                    (SELECT COUNT(*) FROM post_likes l WHERE l.post_id = p.id) AS likes_count,
+                    (SELECT COUNT(*) FROM post_comments c WHERE c.post_id = p.id) AS comments_count
                 FROM posts p
                 WHERE p.author_id = ?
                 ORDER BY p.created_at DESC
@@ -139,7 +139,7 @@ public class AdminManagementService {
         int size = pageSize(requestedSize);
         int offset = page * size;
         long total = jdbcTemplate.queryForObject("""
-                SELECT COUNT_BIG(*) FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?
+                SELECT COUNT(*) FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?
                 """, Long.class, userId, userId);
         List<AdminBlockDto> result = jdbcTemplate.query("""
                 SELECT b.id, b.blocker_id, blocker.username AS blocker_username,
@@ -185,7 +185,7 @@ public class AdminManagementService {
         }
         String filter = conditions.isEmpty() ? "" : "WHERE " + String.join(" AND ", conditions);
         long total = jdbcTemplate.queryForObject(
-                "SELECT COUNT_BIG(*) FROM user_reports r " + filter, Long.class, filters.toArray());
+                "SELECT COUNT(*) FROM user_reports r " + filter, Long.class, filters.toArray());
         String sql = """
                 SELECT r.id, r.reporter_id, reporter.username reporter_username,
                     reporter.display_name reporter_name, r.reported_user_id,
@@ -229,7 +229,7 @@ public class AdminManagementService {
 
     private void requireUser(long userId) {
         Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT_BIG(*) FROM users WHERE id = ? AND account_role = 'USER'", Long.class, userId);
+                "SELECT COUNT(*) FROM users WHERE id = ? AND account_role = 'USER'", Long.class, userId);
         if (count == null || count == 0) throw new NotFoundException("User was not found");
     }
 
@@ -244,9 +244,9 @@ public class AdminManagementService {
     @Transactional
     public void updateReport(String adminUsername, long id, UpdateReportRequest request) {
         int changed = jdbcTemplate.update("""
-                UPDATE user_reports SET status = ?, resolution_note = ?, updated_at = SYSUTCDATETIME()
+                UPDATE user_reports SET status = ?, resolution_note = ?, updated_at = ?
                 WHERE id = ?
-                """, request.status(), blankToNull(request.resolutionNote()), id);
+                """, request.status(), blankToNull(request.resolutionNote()), utc(0), id);
         if (changed == 0) throw new NotFoundException("Report was not found");
         audit(adminUsername, "UPDATE_REPORT", "REPORT", id, "Changed report status to " + request.status());
     }
@@ -255,7 +255,7 @@ public class AdminManagementService {
         int page = Math.max(0, requestedPage);
         int size = pageSize(requestedSize);
         int offset = page * size;
-        long total = count("SELECT COUNT_BIG(*) FROM admin_audit_log");
+        long total = count("SELECT COUNT(*) FROM admin_audit_log");
         List<AdminAuditDto> result = jdbcTemplate.query("""
                 SELECT id, admin_username, action, target_type, target_id, description, created_at
                 FROM admin_audit_log ORDER BY created_at DESC
@@ -267,16 +267,20 @@ public class AdminManagementService {
         return AdminPageDto.of(result, page, size, total);
     }
 
-    private long count(String sql) {
-        Long result = jdbcTemplate.queryForObject(sql, Long.class);
+    private static java.sql.Timestamp utc(long secondsFromNow) {
+        return java.sql.Timestamp.from(java.time.Instant.now().plusSeconds(secondsFromNow));
+    }
+
+    private long count(String sql, Object... args) {
+        Long result = jdbcTemplate.queryForObject(sql, Long.class, args);
         return result == null ? 0 : result;
     }
 
     private void audit(String admin, String action, String type, long id, String description) {
         jdbcTemplate.update("""
                 INSERT INTO admin_audit_log (admin_username, action, target_type, target_id, description, created_at)
-                VALUES (?, ?, ?, ?, ?, SYSUTCDATETIME())
-                """, admin, action, type, id, description);
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, admin, action, type, id, description, utc(0));
     }
 
     private int pageSize(int requested) {
