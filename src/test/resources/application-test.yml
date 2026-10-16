@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:pacgramtest;MODE=MSSQLServer;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+pacgram:
+  jwt:
+    secret: test-only-jwt-signing-secret-32chars-minimum
+    expiration: PT1H
+  admin:
+    username: pacadmin-test
+    password: TestOnlyAdminPassword123
+  cors:
+    allowed-origins: http://localhost:3000
+  swagger:
+    auto-open: false
+  storage:
+    location: ./target/test-uploads
+    report-evidence-location: ./target/test-report-evidence
+
+logging:
+  level:
+    root: WARN
+    com.pacgram: INFO
